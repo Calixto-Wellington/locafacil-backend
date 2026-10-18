@@ -1,0 +1,218 @@
+import { Router } from 'express';
+import { supabase } from '../config/supabase.js';
+
+const router = Router();
+
+// --- 1. MESA DE APROVAÇÃO (FICHAS) ---
+router.get('/leads', async (req, res) => {
+    try {
+        const { status } = req.query;
+        let query = supabase.from('cadastros_funil').select('*').order('created_at', { ascending: false });
+        
+        if (status && status !== 'TODOS') {
+            query = query.eq('status', status);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.patch('/leads/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, motivo_recusa } = req.body;
+
+        const updateData = { status };
+        if (motivo_recusa) updateData.motivo_recusa = motivo_recusa;
+
+        const { data, error } = await supabase
+            .from('cadastros_funil')
+            .update(updateData)
+            .eq('id', id)
+            .select();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Efetivar Locação (Passa lead para CONTRATADO e cria o locatário)
+router.post('/leads/:id/efetivar', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, cpf, telefone, email, moto_interesse, placa, km_inicial } = req.body;
+
+        // 1. Cria o locatário ativo
+        const { data: novoLocatario, error: errLoc } = await supabase
+            .from('locatarios')
+            .insert([{
+                nome, cpf, telefone, email,
+                placa: placa.toUpperCase(),
+                modelo: moto_interesse || 'Honda CG 160 Start',
+                semanas_pagas: 0, 
+                km_inicial: km_inicial || 0, 
+                km_atual: km_inicial || 0,
+                locafacil_coins: 0
+            }])
+            .select()
+            .single();
+
+        if (errLoc) throw errLoc;
+
+        // 2. Atualiza lead para CONTRATADO
+        await supabase.from('cadastros_funil').update({ status: 'CONTRATADO' }).eq('id', id);
+
+        // 3. Atualiza moto em motos_frota para ALUGADA
+        await supabase
+            .from('motos_frota')
+            .update({ status: 'ALUGADA', km_atual: km_inicial || 0, locatario_atual_id: novoLocatario.id })
+            .eq('placa', placa.toUpperCase());
+
+        res.json({ success: true, novoLocatario });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- 2. GESTÃO DE FROTA E PILOTOS ---
+router.get('/locatarios', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('locatarios').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/locatarios/:id/pagar-semana', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { semanas_pagas, locafacil_coins } = req.body;
+
+        const { data, error } = await supabase
+            .from('locatarios')
+            .update({ semanas_pagas, locafacil_coins })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- 3. PÁTIO DE MOTOS ---
+router.get('/motos', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('motos_frota')
+            .select('*, modelos_catalogo(imagem_url, nome_modelo)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/motos', async (req, res) => {
+    try {
+        const { marca, modelo, cor, ano, placa, km_atual, status, imagem_url } = req.body;
+
+        // Garante catálogo
+        let { data: modExistente } = await supabase
+            .from('modelos_catalogo')
+            .select('id')
+            .ilike('marca', marca)
+            .ilike('modelo', modelo)
+            .maybeSingle();
+
+        let modeloId = modExistente ? modExistente.id : null;
+
+        if (!modeloId) {
+            const { data: novoMod, error: errMod } = await supabase
+                .from('modelos_catalogo')
+                .insert([{ nome_modelo: `${marca} ${modelo}`, marca, modelo, categoria: 'Urbana / Delivery', imagem_url, ativo_vitrine: true }])
+                .select()
+                .single();
+            if (errMod) throw errMod;
+            modeloId = novoMod.id;
+        }
+
+        const { error: errMoto } = await supabase
+            .from('motos_frota')
+            .insert([{ modelo_id: modeloId, marca, modelo, cor, ano, placa: placa.toUpperCase(), km_atual: km_atual || 0, status: status || 'DISPONIVEL' }]);
+
+        if (errMoto) throw errMoto;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.patch('/motos/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        const { error } = await supabase.from('motos_frota').update({ status }).eq('id', id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- 4. LOJA & CONFIGURAÇÕES ---
+router.get('/config/:chave', async (req, res) => {
+    try {
+        const { chave } = req.params;
+        const { data } = await supabase.from('configuracoes').select('valor').eq('chave', chave).maybeSingle();
+        res.json({ valor: data ? data.valor : '10' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/config', async (req, res) => {
+    try {
+        const { chave, valor } = req.body;
+        const { error } = await supabase.from('configuracoes').upsert({ chave, valor }, { onConflict: 'chave' });
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/loja', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('loja_resgate').select('*').order('custo_coins', { ascending: true });
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/loja', async (req, res) => {
+    try {
+        const { titulo, custo_coins } = req.body;
+        const { error } = await supabase.from('loja_resgate').insert([{ titulo, custo_coins, ativo: true }]);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+export default router;
