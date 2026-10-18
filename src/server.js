@@ -4,7 +4,7 @@ import 'dotenv/config';
 
 // Importação das rotas
 import rotasMotos from './routes/motos.js';
-import rotasAgendamento from './routes/agendamento.js'; // <-- 1. Importe aqui
+import rotasAgendamento from './routes/agendamento.js';
 
 const app = express();
 
@@ -13,7 +13,8 @@ app.use(cors({ origin: '*' }));
 
 // Registro das rotas na API
 app.use('/api/motos', rotasMotos);
-app.use('/api/agendamento', rotasAgendamento); // <-- 2. Registre aqui
+app.use('/api/agendamento', rotasAgendamento);
+app.use('/api/cadastro', rotasCadastro);
 
 app.get('/health', (req, res) => {
     res.json({
