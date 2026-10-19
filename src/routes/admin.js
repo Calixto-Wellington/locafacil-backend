@@ -208,14 +208,17 @@ router.get('/agendamento/planos/:modelo', async (req, res) => {
 // Rotas Administrativas: (CORRIGIDO PARA /planos para evitar duplicidade)
 // --- 5. GESTÃO DE PLANOS & PREÇOS ---
 
-// Rota Pública: Retorna os planos ativos de um modelo específico
+// Rota Nova (Busca flexível que encontra 'Start' dentro de 'Honda CG 160 Start')
 router.get('/agendamento/planos/:modelo', async (req, res) => {
     try {
         const { modelo } = req.params;
+        const modeloTexto = decodeURIComponent(modelo).trim();
+
+        // Tenta buscar com busca parcial ilike
         const { data, error } = await supabase
             .from('planos')
             .select('*')
-            .eq('modelo_nome', decodeURIComponent(modelo))
+            .ilike('modelo_nome', `%${modeloTexto}%`)
             .eq('ativo', true);
 
         if (error) throw error;
