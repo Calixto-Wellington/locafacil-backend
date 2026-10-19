@@ -206,6 +206,26 @@ router.get('/agendamento/planos/:modelo', async (req, res) => {
 });
 
 // Rotas Administrativas: (CORRIGIDO PARA /planos para evitar duplicidade)
+// --- 5. GESTÃO DE PLANOS & PREÇOS ---
+
+// Rota Pública: Retorna os planos ativos de um modelo específico
+router.get('/agendamento/planos/:modelo', async (req, res) => {
+    try {
+        const { modelo } = req.params;
+        const { data, error } = await supabase
+            .from('planos')
+            .select('*')
+            .eq('modelo_nome', decodeURIComponent(modelo))
+            .eq('ativo', true);
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Rotas Administrativas (Sem a palavra 'admin' porque o seu app.js já injeta /api/admin antes)
 router.get('/planos', async (req, res) => {
     try {
         const { data, error } = await supabase.from('planos').select('*').order('modelo_nome');
