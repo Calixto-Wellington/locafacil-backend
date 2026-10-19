@@ -186,4 +186,54 @@ router.delete('/loja/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- 5. GESTÃO DE PLANOS & PREÇOS ---
+router.get('/agendamento/planos/:modelo', async (req, res) => {
+    try {
+        const { modelo } = req.params;
+        const { data, error } = await supabase
+            .from('planos')
+            .select('*')
+            .eq('modelo_nome', decodeURIComponent(modelo))
+            .eq('ativo', true);
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/admin/planos', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('planos').select('*').order('modelo_nome');
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/admin/planos', async (req, res) => {
+    try {
+        const { modelo_nome, nome_plano, valor_semanal, valor_caucao, is_recomendado } = req.body;
+        const { error } = await supabase.from('planos').insert([{
+            modelo_nome, nome_plano, valor_semanal, valor_caucao: valor_caucao || 1099.00, is_recomendado: is_recomendado || false, ativo: true
+        }]);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/admin/planos/:id', async (req, res) => {
+    try {
+        const { error } = await supabase.from('planos').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
