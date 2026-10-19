@@ -253,4 +253,24 @@ router.delete('/planos/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Atualizar um plano existente
+router.put('/planos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { modelo_nome, nome_plano, valor_semanal, valor_caucao, is_recomendado } = req.body;
+        
+        const { data, error } = await supabase
+            .from('planos')
+            .update({ modelo_nome, nome_plano, valor_semanal, valor_caucao, is_recomendado })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
+    }
+});
+
 export default router;
