@@ -226,7 +226,7 @@ router.get('/agendamento/planos/:modelo', async (req, res) => {
 });
 
 // Rotas Administrativas de Planos
-router.get('/admin/planos', async (req, res) => {
+router.get('/planos', async (req, res) => {
     try {
         const { data, error } = await supabase.from('planos').select('*').order('modelo_nome');
         if (error) throw error;
@@ -234,7 +234,7 @@ router.get('/admin/planos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/admin/planos', async (req, res) => {
+router.post('/planos', async (req, res) => {
     try {
         const { modelo_nome, nome_plano, valor_semanal, valor_caucao, is_recomendado } = req.body;
         const { error } = await supabase.from('planos').insert([{
@@ -245,7 +245,7 @@ router.post('/admin/planos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/admin/planos/:id', async (req, res) => {
+router.delete('/planos/:id', async (req, res) => {
     try {
         const { error } = await supabase.from('planos').delete().eq('id', req.params.id);
         if (error) throw error;
