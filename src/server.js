@@ -17,6 +17,7 @@ app.use('/api/motos', rotasMotos);
 app.use('/api/agendamento', rotasAgendamento);
 app.use('/api/cadastro', rotasCadastro); // <-- 2. A rota agora está definida e vai funcionar
 app.use('/api/admin', adminRoutes);
+app.use('/api/auth', authRoutes);
 
 app.get('/health', (req, res) => {
     res.json({
