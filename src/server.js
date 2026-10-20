@@ -5,8 +5,10 @@ import 'dotenv/config';
 // Importação das rotas
 import rotasMotos from './routes/motos.js';
 import rotasAgendamento from './routes/agendamento.js';
-import rotasCadastro from './routes/cadastro.js'; // <-- 1. Adicione esta importação
-import adminRoutes from './routes/admin.js'; // ou './src/routes/admin.js'
+import rotasCadastro from './routes/cadastro.js';
+import adminRoutes from './routes/admin.js';
+import authRoutes from './routes/auth.js'; // <-- ADICIONE ESTA LINHA AQUI!
+
 const app = express();
 
 app.use(express.json());
@@ -15,8 +17,8 @@ app.use(cors({ origin: '*' }));
 // Registro das rotas na API
 app.use('/api/motos', rotasMotos);
 app.use('/api/agendamento', rotasAgendamento);
-app.use('/api/cadastro', rotasCadastro); // <-- 2. A rota agora está definida e vai funcionar
-app.use('/api/auth', authRoutes);
+app.use('/api/cadastro', rotasCadastro); 
+app.use('/api/auth', authRoutes); // Agora o authRoutes está definido e vai funcionar!
 app.use('/api/admin', adminRoutes);
 
 app.get('/health', (req, res) => {
