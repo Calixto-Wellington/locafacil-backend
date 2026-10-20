@@ -33,4 +33,50 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// ROTA DE EMERGÊNCIA PARA CRIAR/RESETAR O ADMIN
+router.get('/setup-admin-emergencia', async (req, res) => {
+    try {
+        const emailMaster = 'financeiro@locafacilmotos.com.br';
+        const senhaPlana = 'Admin123!';
+        
+        // Gera o hash utilizando exatamente o bcryptjs do servidor
+        const salt = await bcrypt.genSalt(10);
+        const senha_hash = await bcrypt.hash(senhaPlana, salt);
+
+        // Verifica se já existe
+        const { data: existente } = await supabase
+            .from('usuarios_admin')
+            .select('*')
+            .eq('email', emailMaster)
+            .maybeSingle();
+
+        if (existente) {
+            // Atualiza a senha
+            const { error } = await supabase
+                .from('usuarios_admin')
+                .update({ senha_hash, role: 'ADMIN', ativo: true })
+                .eq('email', emailMaster);
+
+            if (error) throw error;
+            return res.json({ success: true, mensagem: 'Senha do admin atualizada com sucesso!' });
+        } else {
+            // Insere novo
+            const { error } = await supabase
+                .from('usuarios_admin')
+                .insert([{
+                    nome: 'Wellington Simplicio',
+                    email: emailMaster,
+                    senha_hash,
+                    role: 'ADMIN',
+                    ativo: true
+                }]);
+
+            if (error) throw error;
+            return res.json({ success: true, mensagem: 'Admin criado com sucesso!' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
