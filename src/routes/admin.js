@@ -276,7 +276,7 @@ router.put('/planos/:id', async (req, res) => {
     }
 });
 
-/ --- REGISTRAR NOVA TRANSAÇÃO FINANCEIRA ---
+// --- REGISTRAR NOVA TRANSAÇÃO FINANCEIRA ---
 router.post('/financeiro/transacoes', async (req, res) => {
     try {
         const { data_transacao, tipo, categoria, descricao, valor } = req.body;
