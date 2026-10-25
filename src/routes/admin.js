@@ -276,4 +276,34 @@ router.put('/planos/:id', async (req, res) => {
     }
 });
 
+/ --- REGISTRAR NOVA TRANSAÇÃO FINANCEIRA ---
+router.post('/financeiro/transacoes', async (req, res) => {
+    try {
+        const { data_transacao, tipo, categoria, descricao, valor } = req.body;
+
+        if (!tipo || !categoria || !valor) {
+            return res.status(400).json({ error: 'Tipo, categoria e valor são obrigatórios.' });
+        }
+
+        const { data, error } = await supabase
+            .from('transacoes_financeiras')
+            .insert([{
+                data_transacao: data_transacao || new Date().toISOString().split('T')[0],
+                tipo,
+                categoria,
+                descricao: descricao || null,
+                valor: parseFloat(valor)
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, message: 'Lançamento registrado com sucesso!', data });
+    } catch (err) {
+        console.error('Erro ao salvar transação:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
