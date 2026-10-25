@@ -306,4 +306,62 @@ router.post('/financeiro/transacoes', async (req, res) => {
     }
 });
 
+// --- RESUMO DA DRE EM TEMPO REAL ---
+router.get('/financeiro/resumo-dre', async (req, res) => {
+    try {
+        // Pega o primeiro e último dia do mês atual
+        const agora = new Date();
+        const primeiroDiaMes = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString().split('T')[0];
+        const ultimoDiaMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        // Busca todas as transações do mês
+        const { data: transacoes, error } = await supabase
+            .from('transacoes_financeiras')
+            .select('*')
+            .gte('data_transacao', primeiroDiaMes)
+            .lte('data_transacao', ultimoDiaMes);
+
+        if (error) throw error;
+
+        // Calculadores de Totais
+        let faturamentoBruto = 0;
+        let opexTotal = 0;
+        let dividasCapital = 0;
+        let proLabore = 0;
+
+        (transacoes || []).forEach(t => {
+            const val = parseFloat(t.valor) || 0;
+            if (t.tipo === 'ENTRADA') {
+                faturamentoBruto += val;
+            } else if (t.tipo === 'SAIDA') {
+                if (t.categoria.includes('Pró-Labore')) {
+                    proLabore += val;
+                } else if (t.categoria.includes('Financiamento') || t.categoria.includes('Empréstimo') || t.categoria.includes('Dívida')) {
+                    dividasCapital += val;
+                } else {
+                    opexTotal += val;
+                }
+            }
+        });
+
+        // Saldo da Reserva PJ (Entradas - Saídas)
+        const totalSaidas = opexTotal + dividasCapital + proLabore;
+        const reservaLiquidaPJ = faturamentoBruto - totalSaidas;
+
+        res.json({
+            success: true,
+            faturamentoBruto,
+            opexTotal,
+            dividasCapital,
+            proLabore,
+            reservaLiquidaPJ,
+            totalLancamentos: (transacoes || []).length
+        });
+
+    } catch (err) {
+        console.error('Erro ao calcular DRE:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
