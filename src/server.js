@@ -7,7 +7,7 @@ import rotasMotos from './routes/motos.js';
 import rotasAgendamento from './routes/agendamento.js';
 import rotasCadastro from './routes/cadastro.js';
 import adminRoutes from './routes/admin.js';
-import authRoutes from './routes/auth.js'; // <-- ADICIONE ESTA LINHA AQUI!
+import authRoutes from './routes/auth.js';  
 
 const app = express();
 
