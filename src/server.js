@@ -7,7 +7,7 @@ import rotasMotos from './routes/motos.js';
 import rotasAgendamento from './routes/agendamento.js';
 import rotasCadastro from './routes/cadastro.js';
 import adminRoutes from './routes/admin.js';
-import authRoutes from './routes/auth.js';  
+import authRoutes from './routes/auth.js';
 
 const app = express();
 
@@ -17,10 +17,11 @@ app.use(cors({ origin: '*' }));
 // Registro das rotas na API
 app.use('/api/motos', rotasMotos);
 app.use('/api/agendamento', rotasAgendamento);
-app.use('/api/cadastro', rotasCadastro); 
+app.use('/api/cadastro', rotasCadastro);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
+// Health check da API
 app.get('/health', (req, res) => {
     res.json({
         status: 'API LOCAFACILMOTOS Online 🚀',
