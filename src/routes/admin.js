@@ -364,4 +364,58 @@ router.get('/financeiro/resumo-dre', async (req, res) => {
     }
 });
 
+// ======================================================
+// ROTAS DE MANUTENÇÃO DE PEÇAS (Supabase)
+// ======================================================
+
+// 1. POST: Gravar/Atualizar a troca de uma peça
+app.post('/api/admin/manutencao-componentes', async (req, res) => {
+    try {
+        const { placa, componente_id, km_troca, limite_km } = req.body;
+
+        if (!placa || !componente_id || km_troca === undefined) {
+            return res.status(400).json({ error: 'Placa, componente_id e km_troca são obrigatórios.' });
+        }
+
+        // Insere ou atualiza o registro da peça no Supabase
+        const { data, error } = await supabase
+            .from('manutencoes_componentes')
+            .upsert([
+                { 
+                    placa: placa.toUpperCase(), 
+                    componente_id, 
+                    km_troca: parseInt(km_troca, 10), 
+                    limite_km: limite_km || 8000 
+                }
+            ], { onConflict: 'placa,componente_id' });
+
+        if (error) throw error;
+
+        return res.json({ success: true, message: 'Troca de peça registrada com sucesso!', data });
+    } catch (err) {
+        console.error('Erro ao salvar manutenção:', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. GET: Buscar peças trocadas por placa ou todas
+app.get('/api/admin/manutencao-componentes', async (req, res) => {
+    try {
+        const { placa } = req.query;
+        let query = supabase.from('manutencoes_componentes').select('*');
+        
+        if (placa) {
+            query = query.eq('placa', placa.toUpperCase());
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        return res.json(data || []);
+    } catch (err) {
+        console.error('Erro ao buscar manutenções:', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

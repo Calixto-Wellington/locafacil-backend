@@ -18,7 +18,7 @@ app.use(cors({ origin: '*' }));
 app.use('/api/motos', rotasMotos);
 app.use('/api/agendamento', rotasAgendamento);
 app.use('/api/cadastro', rotasCadastro); 
-app.use('/api/auth', authRoutes); // Agora o authRoutes está definido e vai funcionar!
+app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.get('/health', (req, res) => {
