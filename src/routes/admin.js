@@ -115,10 +115,10 @@ router.get('/locatarios', async (req, res) => {
     }
 });
 
-// 1. POST: Salvar / Editar Peça (Nome, Limite, KM de Troca)
+// POST: Registrar ou atualizar troca de componente com data
 router.post('/manutencao-componentes', async (req, res) => {
     try {
-        const { placa, componente_id, nome, km_troca, limite_km } = req.body;
+        const { placa, componente_id, nome, km_troca, limite_km, data_troca } = req.body;
 
         if (!placa || !componente_id) {
             return res.status(400).json({ error: 'Placa e componente_id são obrigatórios.' });
@@ -127,6 +127,7 @@ router.post('/manutencao-componentes', async (req, res) => {
         const placaUpper = placa.toUpperCase();
         const kmNum = parseInt(km_troca || 0, 10);
         const limiteNum = parseInt(limite_km || 8000, 10);
+        const dataIso = data_troca ? new Date(data_troca).toISOString() : new Date().toISOString();
 
         const { data: existente } = await supabase
             .from('manutencoes_componentes')
@@ -139,7 +140,12 @@ router.post('/manutencao-componentes', async (req, res) => {
         if (existente) {
             resultado = await supabase
                 .from('manutencoes_componentes')
-                .update({ nome, km_troca: kmNum, limite_km: limiteNum })
+                .update({ 
+                    nome, 
+                    km_troca: kmNum, 
+                    limite_km: limiteNum,
+                    updated_at: dataIso
+                })
                 .eq('id', existente.id)
                 .select();
         } else {
@@ -150,13 +156,14 @@ router.post('/manutencao-componentes', async (req, res) => {
                     componente_id, 
                     nome,
                     km_troca: kmNum, 
-                    limite_km: limiteNum 
+                    limite_km: limiteNum,
+                    updated_at: dataIso
                 }])
                 .select();
         }
 
         if (resultado.error) throw resultado.error;
-        res.json({ success: true, message: 'Peça atualizada com sucesso!', data: resultado.data });
+        res.json({ success: true, data: resultado.data });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
