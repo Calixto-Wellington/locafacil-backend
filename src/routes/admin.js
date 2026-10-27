@@ -84,12 +84,32 @@ router.post('/leads/:id/efetivar', async (req, res) => {
 // 2. GESTÃO DE FROTA & LOCATÁRIOS
 // ======================================================
 
-// Listar todos os locatários da frota ativa
+// Listar todos os locatários da frota com os dados de manutenção atualizados
 router.get('/locatarios', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('locatarios').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        res.json(data || []);
+        const { data: locatarios, error: errLoc } = await supabase
+            .from('locatarios')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (errLoc) throw errLoc;
+
+        // 1. Busca histórico de manutenção de peças salvo no Supabase
+        const { data: manutencoes } = await supabase
+            .from('manutencoes_componentes')
+            .select('*');
+
+        // 2. Anexa as peças gravadas em cada moto correspondente pela placa
+        const listaComComponentes = (locatarios || []).map(loc => {
+            const placaNorm = (loc.placa || '').toUpperCase().trim();
+            const pecasDaMoto = (manutencoes || []).filter(m => (m.placa || '').toUpperCase().trim() === placaNorm);
+            return {
+                ...loc,
+                componentes: pecasDaMoto
+            };
+        });
+
+        res.json(listaComComponentes);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
