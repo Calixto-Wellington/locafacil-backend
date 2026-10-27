@@ -115,6 +115,70 @@ router.get('/locatarios', async (req, res) => {
     }
 });
 
+// 1. POST: Salvar / Editar Peça (Nome, Limite, KM de Troca)
+router.post('/manutencao-componentes', async (req, res) => {
+    try {
+        const { placa, componente_id, nome, km_troca, limite_km } = req.body;
+
+        if (!placa || !componente_id) {
+            return res.status(400).json({ error: 'Placa e componente_id são obrigatórios.' });
+        }
+
+        const placaUpper = placa.toUpperCase();
+        const kmNum = parseInt(km_troca || 0, 10);
+        const limiteNum = parseInt(limite_km || 8000, 10);
+
+        const { data: existente } = await supabase
+            .from('manutencoes_componentes')
+            .select('id')
+            .eq('placa', placaUpper)
+            .eq('componente_id', componente_id)
+            .maybeSingle();
+
+        let resultado;
+        if (existente) {
+            resultado = await supabase
+                .from('manutencoes_componentes')
+                .update({ nome, km_troca: kmNum, limite_km: limiteNum })
+                .eq('id', existente.id)
+                .select();
+        } else {
+            resultado = await supabase
+                .from('manutencoes_componentes')
+                .insert([{ 
+                    placa: placaUpper, 
+                    componente_id, 
+                    nome,
+                    km_troca: kmNum, 
+                    limite_km: limiteNum 
+                }])
+                .select();
+        }
+
+        if (resultado.error) throw resultado.error;
+        res.json({ success: true, message: 'Peça atualizada com sucesso!', data: resultado.data });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. DELETE: Excluir uma peça da moto
+router.delete('/manutencao-componentes', async (req, res) => {
+    try {
+        const { placa, componente_id } = req.body;
+        const { error } = await supabase
+            .from('manutencoes_componentes')
+            .delete()
+            .eq('placa', (placa || '').toUpperCase())
+            .eq('componente_id', componente_id);
+
+        if (error) throw error;
+        res.json({ success: true, message: 'Peça removida com sucesso!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Baixa de Pix: Incrementa semana paga e soma moedas
 router.post('/locatarios/:id/pagar-semana', async (req, res) => {
     try {
