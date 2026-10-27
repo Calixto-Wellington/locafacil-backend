@@ -21,6 +21,13 @@ app.use('/api/cadastro', rotasCadastro);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
+// Desativa o cache para todas as rotas da API
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    next();
+});
+app.disable('etag');
+
 // Health check da API
 app.get('/health', (req, res) => {
     res.json({
