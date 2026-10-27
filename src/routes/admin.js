@@ -169,20 +169,27 @@ router.post('/manutencao-componentes', async (req, res) => {
     }
 });
 
-// 2. DELETE: Excluir uma peça da moto
-router.delete('/manutencao-componentes', async (req, res) => {
+// DELETE: Remover um componente de manutenção do Supabase
+app.delete('/api/admin/manutencao-componentes', async (req, res) => {
     try {
         const { placa, componente_id } = req.body;
-        const { error } = await supabase
+
+        if (!placa || !componente_id) {
+            return res.status(400).json({ error: 'Placa e componente_id são obrigatórios.' });
+        }
+
+        const { data, error } = await supabase
             .from('manutencoes_componentes')
             .delete()
-            .eq('placa', (placa || '').toUpperCase())
+            .eq('placa', placa.toUpperCase())
             .eq('componente_id', componente_id);
 
         if (error) throw error;
-        res.json({ success: true, message: 'Peça removida com sucesso!' });
+
+        return res.json({ success: true, message: 'Peça removida com sucesso!' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Erro ao excluir manutenção:', err);
+        return res.status(500).json({ error: err.message });
     }
 });
 
