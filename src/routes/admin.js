@@ -84,22 +84,25 @@ router.post('/leads/:id/efetivar', async (req, res) => {
 // 2. GESTÃO DE FROTA & LOCATÁRIOS
 // ======================================================
 
-// Listar todos os locatários da frota com os dados de manutenção atualizados
 router.get('/locatarios', async (req, res) => {
     try {
-        const { data: locatarios, error: errLoc } = await supabase
-            .from('locatarios')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const { status } = req.query;
 
+        let query = supabase.from('locatarios').select('*').order('created_at', { ascending: false });
+
+        if (status === 'ARQUIVADO') {
+            query = query.eq('status', 'ARQUIVADO');
+        } else if (status !== 'TODOS') {
+            query = query.or('status.eq.ATIVO,status.is.null,status.neq.ARQUIVADO');
+        }
+
+        const { data: locatarios, error: errLoc } = await query;
         if (errLoc) throw errLoc;
 
-        // 1. Busca histórico de manutenção de peças salvo no Supabase
         const { data: manutencoes } = await supabase
             .from('manutencoes_componentes')
             .select('*');
 
-        // 2. Anexa as peças gravadas em cada moto correspondente pela placa
         const listaComComponentes = (locatarios || []).map(loc => {
             const placaNorm = (loc.placa || '').toUpperCase().trim();
             const pecasDaMoto = (manutencoes || []).filter(m => (m.placa || '').toUpperCase().trim() === placaNorm);
@@ -111,6 +114,99 @@ router.get('/locatarios', async (req, res) => {
 
         res.json(listaComComponentes);
     } catch (err) {
+        console.error('Erro na rota GET /locatarios:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================================
+// ROTA: ARQUIVAR LOCATÁRIO E LIBERAR MOTO NO PÁTIO
+// PATCH /api/admin/locatarios/:id/arquivar
+// ======================================================
+router.patch('/locatarios/:id/arquivar', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { motivo } = req.body;
+
+        // 1. PASSO 1: Buscar o locatário para identificar a moto vinculada (placa)
+        const { data: locatario, error: errBusca } = await supabase
+            .from('locatarios')
+            .select('id, nome, placa')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (errBusca || !locatario) {
+            return res.status(404).json({ error: 'Locatário não encontrado.' });
+        }
+
+        const dataAtual = new Date().toISOString();
+
+        // 2. PASSO 2: Atualizar o status do locatário para ARQUIVADO no Supabase
+        const { error: errUpdateLoc } = await supabase
+            .from('locatarios')
+            .update({ 
+                status: 'ARQUIVADO',
+                motivo_arquivamento: motivo || 'Devolução / Encerramento de contrato',
+                data_arquivamento: dataAtual,
+                updated_at: dataAtual
+            })
+            .eq('id', id);
+
+        if (errUpdateLoc) throw errUpdateLoc;
+
+        // 3. PASSO 3: Se o piloto tinha uma placa vinculada, libera a moto no pátio
+        if (locatario.placa) {
+            const placaNorm = locatario.placa.toUpperCase().trim();
+
+            const { error: errUpdateMoto } = await supabase
+                .from('motos_frota')
+                .update({ 
+                    status: 'DISPONIVEL',
+                    locatario_atual_id: null,
+                    updated_at: dataAtual
+                })
+                .eq('placa', placaNorm);
+
+            if (errUpdateMoto) {
+                console.warn(`⚠️ Erro ao atualizar status da moto ${placaNorm}:`, errUpdateMoto.message);
+                // Não trava a resposta pois o locatário já foi arquivado
+            }
+        }
+
+        // 4. PASSO 4: Retornar sucesso
+        res.json({ 
+            success: true, 
+            message: `Piloto ${locatario.nome} arquivado com sucesso e moto ${locatario.placa || 'N/A'} liberada no pátio!` 
+        });
+
+    } catch (err) {
+        console.error('Erro ao arquivar locatário:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================================
+// ROTA: REATIVAR CONTRATO DE LOCATÁRIO ARQUIVADO
+// PATCH /api/admin/locatarios/:id/reativar
+// ======================================================
+router.patch('/locatarios/:id/reativar', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('locatarios')
+            .update({ 
+                status: 'ATIVO',
+                motivo_arquivamento: null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        res.json({ success: true, message: 'Contrato do piloto reativado com sucesso!' });
+    } catch (err) {
+        console.error('Erro ao reativar locatário:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -140,9 +236,9 @@ router.post('/manutencao-componentes', async (req, res) => {
         if (existente) {
             resultado = await supabase
                 .from('manutencoes_componentes')
-                .update({ 
-                    nome, 
-                    km_troca: kmNum, 
+                .update({
+                    nome,
+                    km_troca: kmNum,
                     limite_km: limiteNum,
                     updated_at: dataIso
                 })
@@ -151,11 +247,11 @@ router.post('/manutencao-componentes', async (req, res) => {
         } else {
             resultado = await supabase
                 .from('manutencoes_componentes')
-                .insert([{ 
-                    placa: placaUpper, 
-                    componente_id, 
+                .insert([{
+                    placa: placaUpper,
+                    componente_id,
                     nome,
-                    km_troca: kmNum, 
+                    km_troca: kmNum,
                     limite_km: limiteNum,
                     updated_at: dataIso
                 }])
@@ -170,7 +266,7 @@ router.post('/manutencao-componentes', async (req, res) => {
 });
 
 // DELETE: Remover um componente de manutenção do Supabase
-app.delete('/api/admin/manutencao-componentes', async (req, res) => {
+router.delete('/manutencao-componentes', async (req, res) => {
     try {
         const { placa, componente_id } = req.body;
 
