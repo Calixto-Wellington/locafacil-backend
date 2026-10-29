@@ -63,7 +63,7 @@ router.post('/leads/:id/efetivar', async (req, res) => {
                 locafacil_coins: 0
             }])
             .select()
-            .single();
+            .maybeSingle();
 
         if (errLoc) throw errLoc;
 
@@ -299,7 +299,7 @@ router.post('/locatarios/:id/pagamento', async (req, res) => {
             .update({ semanas_pagas, locafacil_coins })
             .eq('id', id)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
         res.json({ success: true, data });
@@ -312,7 +312,7 @@ router.post('/locatarios/:id/pagamento', async (req, res) => {
 router.put('/locatarios/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { data, error } = await supabase.from('locatarios').update(req.body).eq('id', id).select().single();
+        const { data, error } = await supabase.from('locatarios').update(req.body).eq('id', id).select().maybeSingle();
         if (error) throw error;
         res.json({ success: true, data });
     } catch (err) {
@@ -416,7 +416,7 @@ router.post('/motos', async (req, res) => {
                 .from('modelos_catalogo')
                 .insert([{ nome_modelo: `${marca} ${modelo}`, marca, modelo, categoria: 'Urbana / Delivery', imagem_url: imagem || null, ativo_vitrine: true }])
                 .select()
-                .single();
+                .maybeSingle();
             if (errMod) throw errMod;
             modeloId = novoMod.id;
         }
@@ -533,7 +533,7 @@ router.put('/planos/:id', async (req, res) => {
             .update({ modelo_nome, nome_plano, valor_semanal, valor_caucao, is_recomendado })
             .eq('id', id)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
         res.json({ success: true, data });
