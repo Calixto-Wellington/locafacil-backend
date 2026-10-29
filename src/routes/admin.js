@@ -289,25 +289,53 @@ router.delete('/manutencao-componentes', async (req, res) => {
     }
 });
 
-// Baixa de Pix: Incrementa semana paga e soma moedas
+// ======================================================
+// ROTA: REGISTRAR PAGAMENTO (+1 SEMANA PAGA)
+// POST /api/admin/locatarios/:id/pagamento
+// ======================================================
 router.post('/locatarios/:id/pagamento', async (req, res) => {
     try {
         const { id } = req.params;
-        const { semanas_pagas, locafacil_coins } = req.body;
-        const { data, error } = await supabase
+        const { semanas } = req.body;
+        const qtdSemanas = parseInt(semanas || 1, 10);
+
+        // 1. Busca os dados atuais do piloto usando .maybeSingle() no SELECT
+        const { data: locatario, error: errBusca } = await supabase
             .from('locatarios')
-            .update({ semanas_pagas, locafacil_coins })
+            .select('id, semanas_pagas, nome, placa')
             .eq('id', id)
-            .select()
             .maybeSingle();
 
-        if (error) throw error;
-        res.json({ success: true, data });
+        if (errBusca || !locatario) {
+            return res.status(404).json({ error: 'Locatário não encontrado.' });
+        }
+
+        const semanasAtuais = parseInt(locatario.semanas_pagas || 0, 10);
+        const novasSemanas = semanasAtuais + qtdSemanas;
+
+        // 2. Atualiza o banco (SEM .single() no final do update)
+        const { error: errUpdate } = await supabase
+            .from('locatarios')
+            .update({ 
+                semanas_pagas: novasSemanas,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (errUpdate) throw errUpdate;
+
+        // 3. Retorna a confirmação em JSON para o frontend
+        return res.json({ 
+            success: true, 
+            message: `Pagamento registrado para ${locatario.nome}! Total: ${novasSemanas} semanas.`,
+            semanas_pagas: novasSemanas
+        });
+
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Erro ao registrar pagamento:', err);
+        return res.status(500).json({ error: err.message });
     }
 });
-
 // Atualização de dados do piloto / locatário
 router.put('/locatarios/:id', async (req, res) => {
     try {
