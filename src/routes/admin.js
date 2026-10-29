@@ -336,17 +336,39 @@ router.post('/locatarios/:id/pagamento', async (req, res) => {
         return res.status(500).json({ error: err.message });
     }
 });
-// Atualização de dados do piloto / locatário
+// ======================================================
+// ROTA: PUT /api/admin/locatarios/:id
+// ======================================================
 router.put('/locatarios/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { data, error } = await supabase.from('locatarios').update(req.body).eq('id', id).select().maybeSingle();
+        const { nome, placa, modelo, telefone, cpf, semanas_pagas, km_atual, tipo_contrato } = req.body;
+
+        const { data, error } = await supabase
+            .from('locatarios')
+            .update({ 
+                nome, 
+                placa: placa ? placa.toUpperCase().trim() : undefined, 
+                modelo, 
+                telefone, 
+                cpf, 
+                semanas_pagas, 
+                km_atual, 
+                tipo_contrato: tipo_contrato || 'OPCAO_COMPRA',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select();
+
         if (error) throw error;
-        res.json({ success: true, data });
+
+        res.json({ success: true, message: 'Locatário atualizado com sucesso!', data });
     } catch (err) {
+        console.error('Erro ao atualizar locatário:', err);
         res.status(500).json({ error: err.message });
     }
 });
+
 
 // Registro de telemetria / histórico de rodagem
 router.post('/rastreador', async (req, res) => {
