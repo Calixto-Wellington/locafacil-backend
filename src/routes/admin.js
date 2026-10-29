@@ -293,9 +293,7 @@ router.delete('/manutencao-componentes', async (req, res) => {
 router.post('/locatarios/:id/pagar-semana', async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`Recebendo solicitação de pagamento de semana para locatário ID: ${id}`);
         const { semanas_pagas, locafacil_coins } = req.body;
-        console.log
         const { data, error } = await supabase
             .from('locatarios')
             .update({ semanas_pagas, locafacil_coins })
