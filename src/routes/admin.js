@@ -290,7 +290,7 @@ router.delete('/manutencao-componentes', async (req, res) => {
 });
 
 // Baixa de Pix: Incrementa semana paga e soma moedas
-router.post('/locatarios/:id/pagar-semana', async (req, res) => {
+router.post('/locatarios/:id/pagamento', async (req, res) => {
     try {
         const { id } = req.params;
         const { semanas_pagas, locafacil_coins } = req.body;
