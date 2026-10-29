@@ -279,7 +279,7 @@ router.post('/rastreador', async (req, res) => {
 });
 
 // ======================================================
-// 3. OFICINA & PEÇAS DE MANUTENÇÃO (COMPONENTE INTEGRADO)
+// 3. OFICINA & PEÇAS DE MANUTENÇÃO
 // ======================================================
 
 // GET /api/admin/manutencao-componentes — Listar peças
@@ -646,7 +646,7 @@ router.delete('/loja/:id', async (req, res) => {
 });
 
 // ======================================================
-// 7. GESTÃO FINANCEIRA (DRE & TRANSAÇÕES)
+// 7. GESTÃO FINANCEIRA & RESUMO DRE
 // ======================================================
 
 // GET /api/admin/financeiro/transacoes — Listar lançamentos financeiros
@@ -683,6 +683,53 @@ router.post('/financeiro/transacoes', async (req, res) => {
         if (error) throw error;
         return res.json({ success: true, data });
     } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/admin/financeiro/resumo-dre — Resumo DRE em tempo real
+router.get('/financeiro/resumo-dre', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('transacoes_financeiras')
+            .select('*');
+
+        if (error) throw error;
+
+        let faturamentoBruto = 0;
+        let opexTotal = 0;
+        let proLabore = 0;
+        let dividas = 0;
+
+        (data || []).forEach(item => {
+            const val = parseFloat(item.valor) || 0;
+            const cat = (item.categoria || '').toUpperCase();
+            if (item.tipo === 'ENTRADA') {
+                faturamentoBruto += val;
+            } else if (item.tipo === 'SAIDA') {
+                if (cat.includes('PRÓ-LABORE') || cat.includes('PRO-LABORE')) {
+                    proLabore += val;
+                } else if (cat.includes('PASSIVO') || cat.includes('DIVIDA') || cat.includes('EMPRÉSTIMO')) {
+                    dividas += val;
+                } else {
+                    opexTotal += val;
+                }
+            }
+        });
+
+        const sobraLiquida = faturamentoBruto - (opexTotal + proLabore + dividas);
+        const reservaLiquidaPJ = sobraLiquida;
+
+        return res.json({
+            faturamentoBruto,
+            opexTotal,
+            proLabore,
+            dividas,
+            sobraLiquida,
+            reservaLiquidaPJ
+        });
+    } catch (err) {
+        console.error('Erro no resumo DRE:', err);
         return res.status(500).json({ error: err.message });
     }
 });
