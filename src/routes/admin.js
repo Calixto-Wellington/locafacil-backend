@@ -12,17 +12,23 @@ const router = Router();
 // ======================================================
 
 // GET /api/admin/leads — Listar fichas com filtro por status
+// GET /api/admin/leads — Listar fichas de cadastro (Mesa de Aprovação)
 router.get('/leads', async (req, res) => {
     try {
         const { status } = req.query;
         let query = supabase.from('cadastros_funil').select('*').order('created_at', { ascending: false });
 
-        if (status && status !== 'TODOS') {
-            query = query.eq('status', status);
+        // Aplica o filtro apenas se for um status válido e diferente de 'TODOS' ou 'undefined'
+        if (status && status !== 'TODOS' && status !== 'undefined' && status !== 'null') {
+            query = query.ilike('status', status.trim());
         }
 
         const { data, error } = await query;
-        if (error) throw error;
+        if (error) {
+            console.error('Erro Supabase na busca de leads:', error);
+            throw error;
+        }
+
         return res.json(data || []);
     } catch (err) {
         console.error('Erro na rota GET /leads:', err);
