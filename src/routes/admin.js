@@ -520,13 +520,14 @@ router.delete('/motos/:id', async (req, res) => {
 // 5. GESTÃO DE PLANOS & VALORES
 // ======================================================
 
-// GET /api/admin/planos — Listar todos os planos
+// GET /api/admin/planos — Listar todos os planos de aluguel
 router.get('/planos', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('planos').select('*').order('modelo_nome');
+        const { data, error } = await supabase.from('planos').select('*');
         if (error) throw error;
         return res.json(data || []);
     } catch (err) {
+        console.error('Erro na rota GET /planos:', err);
         return res.status(500).json({ error: err.message });
     }
 });
@@ -616,13 +617,14 @@ router.post('/config', async (req, res) => {
     }
 });
 
-// GET /api/admin/loja — Listar itens da loja
+// GET /api/admin/loja — Listar itens do catálogo da loja
 router.get('/loja', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('loja_resgate').select('*').order('custo_coins', { ascending: true });
+        const { data, error } = await supabase.from('loja_resgate').select('*');
         if (error) throw error;
         return res.json(data || []);
     } catch (err) {
+        console.error('Erro na rota GET /loja:', err);
         return res.status(500).json({ error: err.message });
     }
 });
