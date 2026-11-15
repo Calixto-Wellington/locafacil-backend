@@ -420,7 +420,7 @@ router.get('/motos', async (req, res) => {
     }
 });
 
-// POST /api/admin/motos — Cadastrar nova moto garantindo o modelo_id
+// POST /api/admin/motos — Cadastrar nova moto no pátio
 router.post('/motos', async (req, res) => {
     try {
         const { marca, modelo, cor, ano, placa, km_atual, status, imagem, modelo_id } = req.body;
@@ -433,11 +433,22 @@ router.post('/motos', async (req, res) => {
         const marcaLimpa = marca.trim();
         const modeloLimpo = modelo.trim();
 
-        // 1. Resolver o modelo_id sem falhar caso haja duplicatas
+        // 1. Verificar se a placa já existe no pátio
+        const { data: motoExistente } = await supabase
+            .from('motos_frota')
+            .select('id, placa')
+            .eq('placa', placaLimpa)
+            .limit(1);
+
+        if (motoExistente && motoExistente.length > 0) {
+            return res.status(400).json({ error: `A moto com placa ${placaLimpa} já está cadastrada no pátio.` });
+        }
+
+        // 2. Resolver o modelo_id correto da tabela modelos_catalogo
         let modeloIdFinal = modelo_id || null;
 
         if (!modeloIdFinal) {
-            // Busca no catálogo usando .limit(1) em vez de .maybeSingle()
+            // Busca modelo equivalente no catálogo
             const { data: modExistente } = await supabase
                 .from('modelos_catalogo')
                 .select('id')
@@ -446,9 +457,10 @@ router.post('/motos', async (req, res) => {
                 .limit(1);
 
             if (modExistente && modExistente.length > 0) {
-                modeloIdFinal = modExistente.id;
+                // Acesso correto ao elemento do Array: modExistente[0].id
+                modeloIdFinal = modExistente[0].id;
             } else {
-                // Tenta buscar por semelhança de nome no catálogo
+                // Busca alternativa por nome do modelo
                 const { data: modPorNome } = await supabase
                     .from('modelos_catalogo')
                     .select('id')
@@ -456,9 +468,9 @@ router.post('/motos', async (req, res) => {
                     .limit(1);
 
                 if (modPorNome && modPorNome.length > 0) {
-                    modeloIdFinal = modPorNome.id;
+                    modeloIdFinal = modPorNome[0].id;
                 } else {
-                    // Se não existir no catálogo, insere um novo modelo
+                    // Se não existir, insere o novo modelo no catálogo
                     const { data: novoMod, error: errMod } = await supabase
                         .from('modelos_catalogo')
                         .insert([{
@@ -469,16 +481,18 @@ router.post('/motos', async (req, res) => {
                             imagem_url: imagem ? imagem.trim() : null,
                             ativo_vitrine: true
                         }])
-                        .select();
+                        .select('id');
 
-                    if (!errMod && novoMod && novoMod.length > 0) {
-                        modeloIdFinal = novoMod.id;
+                    if (novoMod && novoMod.length > 0) {
+                        modeloIdFinal = novoMod[0].id;
+                    } else if (errMod) {
+                        console.error('Erro ao inserir em modelos_catalogo:', errMod);
                     }
                 }
             }
         }
 
-        // Fallback de segurança: se por algum motivo o catálogo não retornou, vincula ao primeiro ID do catálogo
+        // Fallback de segurança: vincula ao primeiro modelo existente no catálogo
         if (!modeloIdFinal) {
             const { data: fallbackMod } = await supabase
                 .from('modelos_catalogo')
@@ -486,7 +500,7 @@ router.post('/motos', async (req, res) => {
                 .limit(1);
 
             if (fallbackMod && fallbackMod.length > 0) {
-                modeloIdFinal = fallbackMod.id;
+                modeloIdFinal = fallbackMod[0].id;
             }
         }
 
@@ -494,7 +508,7 @@ router.post('/motos', async (req, res) => {
             return res.status(400).json({ error: 'Não foi possível associar a moto a um modelo do catálogo (modelo_id ausente).' });
         }
 
-        // 2. Inserir a moto na tabela motos_frota com o modelo_id resolvido
+        // 3. Inserir a moto na tabela motos_frota com o modelo_id garantido
         const payloadMoto = {
             modelo_id: modeloIdFinal,
             marca: marcaLimpa,
@@ -515,11 +529,11 @@ router.post('/motos', async (req, res) => {
             .insert([payloadMoto]);
 
         if (errMoto) {
-            console.error('Erro ao inserir em motos_frota:', errMoto);
+            console.error('Erro ao inserir moto em motos_frota:', errMoto);
             return res.status(400).json({ error: `Erro no banco de dados: ${errMoto.message}` });
         }
 
-        return res.json({ success: true, message: 'Moto cadastrada com sucesso!' });
+        return res.json({ success: true, message: 'Moto cadastrada no pátio com sucesso!' });
 
     } catch (err) {
         console.error('Erro no POST /admin/motos:', err);
