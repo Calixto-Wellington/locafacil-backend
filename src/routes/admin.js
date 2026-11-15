@@ -420,55 +420,98 @@ router.get('/motos', async (req, res) => {
     }
 });
 
-// POST /api/admin/motos — Cadastrar nova moto
+// POST /api/admin/motos — Cadastrar nova moto no pátio
 router.post('/motos', async (req, res) => {
     try {
         const { marca, modelo, cor, ano, placa, km_atual, status, imagem } = req.body;
 
+        if (!marca || !modelo || !placa) {
+            return res.status(400).json({ error: 'Marca, Modelo e Placa são campos obrigatórios.' });
+        }
+
+        const placaLimpa = placa.trim().toUpperCase();
+        const marcaLimpa = marca.trim();
+        const modeloLimpo = modelo.trim();
+
+        // 1. Verificar se a placa já está cadastrada no pátio
+        const { data: motoExistente } = await supabase
+            .from('motos_frota')
+            .select('id, placa')
+            .eq('placa', placaLimpa)
+            .limit(1);
+
+        if (motoExistente && motoExistente.length > 0) {
+            return res.status(400).json({ error: `A moto com placa ${placaLimpa} já está cadastrada no pátio.` });
+        }
+
+        // 2. Buscar modelo no catálogo (usando .limit(1) para evitar erro PGRST116 com duplicatas)
         let { data: modExistente } = await supabase
             .from('modelos_catalogo')
             .select('id')
-            .ilike('marca', marca)
-            .ilike('modelo', modelo)
-            .maybeSingle();
+            .ilike('marca', marcaLimpa)
+            .ilike('modelo', modeloLimpo)
+            .limit(1);
 
-        let modeloId = modExistente ? modExistente.id : null;
+        let modeloId = (modExistente && modExistente.length > 0) ? modExistente.id : null;
 
+        // 3. Se não encontrou o modelo, cadastra no catálogo com fallback
         if (!modeloId) {
             const { data: novoMod, error: errMod } = await supabase
                 .from('modelos_catalogo')
                 .insert([{
-                    nome_modelo: `${marca} ${modelo}`,
-                    marca,
-                    modelo,
+                    nome_modelo: `${marcaLimpa} ${modeloLimpo}`,
+                    marca: marcaLimpa,
+                    modelo: modeloLimpo,
                     categoria: 'Urbana / Delivery',
-                    imagem_url: imagem || null,
+                    imagem_url: imagem ? imagem.trim() : null,
                     ativo_vitrine: true
                 }])
-                .select()
-                .single();
+                .select();
 
-            if (errMod) throw errMod;
-            modeloId = novoMod.id;
+            if (errMod) {
+                // Se deu erro de chave duplicada, tenta recuperar o ID existente
+                const { data: modRetry } = await supabase
+                    .from('modelos_catalogo')
+                    .select('id')
+                    .ilike('nome_modelo', `%${modeloLimpo}%`)
+                    .limit(1);
+                
+                if (modRetry && modRetry.length > 0) {
+                    modeloId = modRetry.id;
+                }
+            } else if (novoMod && novoMod.length > 0) {
+                modeloId = novoMod.id;
+            }
         }
+
+        // 4. Inserir a moto no pátio (motos_frota)
+        const payloadMoto = {
+            marca: marcaLimpa,
+            modelo: modeloLimpo,
+            cor: cor ? cor.trim() : 'Preta',
+            ano: parseInt(ano, 10) || 2025,
+            placa: placaLimpa,
+            km_atual: parseInt(km_atual, 10) || 0,
+            status: status || 'DISPONIVEL'
+        };
+
+        if (modeloId) payloadMoto.modelo_id = modeloId;
+        if (imagem && imagem.trim()) payloadMoto.imagem_url = imagem.trim();
 
         const { error: errMoto } = await supabase
             .from('motos_frota')
-            .insert([{
-                modelo_id: modeloId,
-                marca,
-                modelo,
-                cor,
-                ano: parseInt(ano, 10) || 2025,
-                placa: (placa || '').toUpperCase().trim(),
-                km_atual: parseInt(km_atual, 10) || 0,
-                status: status || 'DISPONIVEL'
-            }]);
+            .insert([payloadMoto]);
 
-        if (errMoto) throw errMoto;
-        return res.json({ success: true });
+        if (errMoto) {
+            console.error('Erro ao inserir moto em motos_frota:', errMoto);
+            return res.status(400).json({ error: `Erro no banco de dados: ${errMoto.message}` });
+        }
+
+        return res.json({ success: true, message: 'Moto cadastrada com sucesso!' });
+
     } catch (err) {
-        return res.status(500).json({ error: err.message });
+        console.error('Erro no POST /admin/motos:', err);
+        return res.status(500).json({ error: err.message || 'Erro interno ao cadastrar moto.' });
     }
 });
 
