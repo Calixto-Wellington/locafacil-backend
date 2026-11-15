@@ -420,10 +420,10 @@ router.get('/motos', async (req, res) => {
     }
 });
 
-// POST /api/admin/motos — Cadastrar nova moto no pátio
+// POST /api/admin/motos — Cadastrar nova moto garantindo o modelo_id
 router.post('/motos', async (req, res) => {
     try {
-        const { marca, modelo, cor, ano, placa, km_atual, status, imagem } = req.body;
+        const { marca, modelo, cor, ano, placa, km_atual, status, imagem, modelo_id } = req.body;
 
         if (!marca || !modelo || !placa) {
             return res.status(400).json({ error: 'Marca, Modelo e Placa são campos obrigatórios.' });
@@ -433,59 +433,70 @@ router.post('/motos', async (req, res) => {
         const marcaLimpa = marca.trim();
         const modeloLimpo = modelo.trim();
 
-        // 1. Verificar se a placa já está cadastrada no pátio
-        const { data: motoExistente } = await supabase
-            .from('motos_frota')
-            .select('id, placa')
-            .eq('placa', placaLimpa)
-            .limit(1);
+        // 1. Resolver o modelo_id sem falhar caso haja duplicatas
+        let modeloIdFinal = modelo_id || null;
 
-        if (motoExistente && motoExistente.length > 0) {
-            return res.status(400).json({ error: `A moto com placa ${placaLimpa} já está cadastrada no pátio.` });
-        }
-
-        // 2. Buscar modelo no catálogo (usando .limit(1) para evitar erro PGRST116 com duplicatas)
-        let { data: modExistente } = await supabase
-            .from('modelos_catalogo')
-            .select('id')
-            .ilike('marca', marcaLimpa)
-            .ilike('modelo', modeloLimpo)
-            .limit(1);
-
-        let modeloId = (modExistente && modExistente.length > 0) ? modExistente.id : null;
-
-        // 3. Se não encontrou o modelo, cadastra no catálogo com fallback
-        if (!modeloId) {
-            const { data: novoMod, error: errMod } = await supabase
+        if (!modeloIdFinal) {
+            // Busca no catálogo usando .limit(1) em vez de .maybeSingle()
+            const { data: modExistente } = await supabase
                 .from('modelos_catalogo')
-                .insert([{
-                    nome_modelo: `${marcaLimpa} ${modeloLimpo}`,
-                    marca: marcaLimpa,
-                    modelo: modeloLimpo,
-                    categoria: 'Urbana / Delivery',
-                    imagem_url: imagem ? imagem.trim() : null,
-                    ativo_vitrine: true
-                }])
-                .select();
+                .select('id')
+                .ilike('marca', marcaLimpa)
+                .ilike('modelo', modeloLimpo)
+                .limit(1);
 
-            if (errMod) {
-                // Se deu erro de chave duplicada, tenta recuperar o ID existente
-                const { data: modRetry } = await supabase
+            if (modExistente && modExistente.length > 0) {
+                modeloIdFinal = modExistente.id;
+            } else {
+                // Tenta buscar por semelhança de nome no catálogo
+                const { data: modPorNome } = await supabase
                     .from('modelos_catalogo')
                     .select('id')
                     .ilike('nome_modelo', `%${modeloLimpo}%`)
                     .limit(1);
-                
-                if (modRetry && modRetry.length > 0) {
-                    modeloId = modRetry.id;
+
+                if (modPorNome && modPorNome.length > 0) {
+                    modeloIdFinal = modPorNome.id;
+                } else {
+                    // Se não existir no catálogo, insere um novo modelo
+                    const { data: novoMod, error: errMod } = await supabase
+                        .from('modelos_catalogo')
+                        .insert([{
+                            nome_modelo: `${marcaLimpa} ${modeloLimpo}`,
+                            marca: marcaLimpa,
+                            modelo: modeloLimpo,
+                            categoria: 'Urbana / Delivery',
+                            imagem_url: imagem ? imagem.trim() : null,
+                            ativo_vitrine: true
+                        }])
+                        .select();
+
+                    if (!errMod && novoMod && novoMod.length > 0) {
+                        modeloIdFinal = novoMod.id;
+                    }
                 }
-            } else if (novoMod && novoMod.length > 0) {
-                modeloId = novoMod.id;
             }
         }
 
-        // 4. Inserir a moto no pátio (motos_frota)
+        // Fallback de segurança: se por algum motivo o catálogo não retornou, vincula ao primeiro ID do catálogo
+        if (!modeloIdFinal) {
+            const { data: fallbackMod } = await supabase
+                .from('modelos_catalogo')
+                .select('id')
+                .limit(1);
+
+            if (fallbackMod && fallbackMod.length > 0) {
+                modeloIdFinal = fallbackMod.id;
+            }
+        }
+
+        if (!modeloIdFinal) {
+            return res.status(400).json({ error: 'Não foi possível associar a moto a um modelo do catálogo (modelo_id ausente).' });
+        }
+
+        // 2. Inserir a moto na tabela motos_frota com o modelo_id resolvido
         const payloadMoto = {
+            modelo_id: modeloIdFinal,
             marca: marcaLimpa,
             modelo: modeloLimpo,
             cor: cor ? cor.trim() : 'Preta',
@@ -495,15 +506,16 @@ router.post('/motos', async (req, res) => {
             status: status || 'DISPONIVEL'
         };
 
-        if (modeloId) payloadMoto.modelo_id = modeloId;
-        if (imagem && imagem.trim()) payloadMoto.imagem_url = imagem.trim();
+        if (imagem && imagem.trim()) {
+            payloadMoto.imagem_url = imagem.trim();
+        }
 
         const { error: errMoto } = await supabase
             .from('motos_frota')
             .insert([payloadMoto]);
 
         if (errMoto) {
-            console.error('Erro ao inserir moto em motos_frota:', errMoto);
+            console.error('Erro ao inserir em motos_frota:', errMoto);
             return res.status(400).json({ error: `Erro no banco de dados: ${errMoto.message}` });
         }
 
